@@ -6,55 +6,84 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04 # Шаг 1: Выбираем более новую и стабильную ОС для runner'а
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    steps: # Шаг 2: Последовательность действий
+      - name: Checkout code # Шаг 3: Получаем исходный код проекта из репозитория
+        uses: actions/checkout@v4 # Используем официальный экшен GitHub для этого
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - name: Setup Python # Шаг 4: Настраиваем Python в среде runner'а
+        uses: actions/setup-python@v5 # Используем актуальную версию экшена
         with:
-          python-version: '3.10'
+          python-version: '3.10' # Указываем конкретную версию Python
 
-      - name: Install Buildozer and dependencies
+      - name: Install Buildozer and dependencies # Шаг 5: Устанавливаем все необходимые инструменты и зависимости
         run: |
+          # Обновляем список пакетов в системе
           sudo apt-get update
+          # Устанавливаем системные зависимости, необходимые для сборки:
+          # git, zip, unzip - для работы с файлами и репозиториями
+          # openjdk-17-jdk - Java Development Kit, нужен для Android SDK
+          # build-essential и другие - компиляторы и библиотеки для сборки Python-пакетов
           sudo apt-get install -y git zip unzip openjdk-17-jdk build-essential libffi-dev libssl-dev libxml2-dev libxslt1-dev libjpeg8-dev zlib1g-dev
+          # Обновляем pip - инструмент управления пакетами Python
           pip install --upgrade pip setuptools wheel
-          pip install Cython==0.29.36 buildozer
+          # Устанавливаем Cython - необходим для компиляции некоторых Python-пакетов
+          pip install Cython==0.29.36
+          # Устанавливаем Buildozer - основной инструмент для сборки APK
+          pip install buildozer
 
-      - name: Create buildozer.spec
+      - name: Create buildozer.spec # Шаг 6: Создаём конфигурационный файл для Buildozer
         run: |
+          # Используем echo для записи содержимого файла, избегая проблем с YAML-синтаксисом
           echo "[app]
+          # Название приложения
           title = Bar Inventory
+          # Имя пакета (должно быть уникальным)
           package.name = barinventory
+          # Домен пакета (обычно используется org.имя_организации)
           package.domain = org.barinventory
+          # Директория с исходным кодом (текущая)
           source.dir = .
+          # Расширения файлов, которые нужно включить в APK
           source.include_exts = py,db
+          # Версия приложения
           version = 1.0
+          # Зависимости Python, необходимые для работы приложения
+          # ВАЖНО: Убран openpyxl для стабильной сборки
           requirements = python3,kivy,sqlite3
+          # Версия Android API (34 - одна из последних стабильных)
           android.api = 34
+          # Минимальная поддерживаемая версия Android API
           android.minapi = 21
+          # Версия Native Development Kit (NDK)
           android.ndk = 25b
+          # Целевая архитектура процессора (arm64-v8a - современные Android-устройства)
           android.archs = arm64-v8a
+          # Ориентация экрана приложения
           orientation = portrait
+          # Разрешения, необходимые приложению
           android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+          # Автоматически принимаем лицензию Android SDK
           android.accept_sdk_license = True
           
+          # Настройки самого Buildozer
           [buildozer]
+          # Уровень логирования (2 - подробный)
           log_level = 2" > buildozer.spec
 
-      - name: Build APK
+      - name: Build APK # Шаг 7: Запускаем процесс сборки APK
         run: |
-          # Создадим минимальный main.py, если его нет
+          # Проверяем, существует ли файл main.py (точка входа в приложение)
+          # Если нет - создаём минимальный для теста
           if [ ! -f "main.py" ]; then
             echo 'print("Hello from APK")' > main.py
           fi
+          # Запускаем Buildozer в режиме отладки для сборки debug-версии APK
           buildozer -v android debug
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Upload APK # Шаг 8: Загружаем собранный APK как артефакт
+        uses: actions/upload-artifact@v4 # Используем официальный экшен для загрузки файлов
         with:
-          name: bar-inventory-apk
-          path: bin/*.apk
+          name: bar-inventory-apk # Имя артефакта
+          path: bin/*.apk # Путь к файлу APK (обычно создаётся в папке bin)
