@@ -33,9 +33,8 @@ jobs:
           source.dir = .
           source.include_exts = py,db
           version = 1.0
-          requirements = python3,kivy,sqlite3,openpyxl==3.1.2
-          p4a.hook = hooks/hook-sqlite3.py
-          android.api = 31
+          requirements = python3,kivy,sqlite3
+          android.api = 33
           android.minapi = 21
           android.ndk = 25b
           android.archs = arm64-v8a
@@ -44,7 +43,7 @@ jobs:
           android.accept_sdk_license = True
 
           [buildozer]
-          log_level = info" > buildozer.spec
+          log_level = 2" > buildozer.spec
 
       - name: Build APK
         run: buildozer -v android debug
