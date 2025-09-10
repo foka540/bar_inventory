@@ -1,12 +1,15 @@
-# Buildozer
-.buildozer/
-bin/
-*.apk
+# Базы данных
+bar_inventory.db
+*.db
+*.sqlite
 
-# Python
+# Логи
+*.log
+
+# Кэш
 __pycache__/
 *.pyc
-*.pyo
 
-# VS Code
-.vscode/
+# Экспортные файлы
+*.xlsx
+*.csv
