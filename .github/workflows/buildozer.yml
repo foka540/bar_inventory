@@ -25,22 +25,39 @@ jobs:
         run: |
           cat > buildozer.spec << 'EOF'
           [app]
-            title = Bar Inventory
-            package.name = barinventory
-            package.domain = org.barinventory
-            source.dir = .
-            source.include_exts = py,db
-            requirements = python3,kivy,sqlite3
-            p4a.hook = hooks/hook-sqlite3.py
-            android.api = 31
-            android.minapi = 21
-            android.ndk = 25b
-            android.arch = arm64-v8a
-            orientation = portrait
-            android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
-            android.accept_sdk_license = True
-            EOF
+          title = Bar Inventory
+          package.name = barinventory
+          package.domain = org.barinventory
+          source.dir = .
+          source.include_exts = py,db
+          version = 1.0
+          requirements = python3,kivy,sqlite3,openpyxl
+          p4a.hook = hooks/hook-sqlite3.py
+          android.api = 31
+          android.minapi = 21
+          android.ndk = 25b
+          android.arch = arm64-v8a
+          orientation = portrait
+          android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+          android.accept_sdk_license = True
+
+          [buildozer]
+          log_level = info
+          EOF
+
+      - name: Accept Android SDK licenses manually
+        run: |
+          mkdir -p ~/.android
+          touch ~/.android/repositories.cfg
+          yes | sdkmanager --licenses
+          yes | sdkmanager "platform-tools" "build-tools;31.0.0" "platforms;android-31"
 
       - name: Build APK
         run: |
           buildozer -v android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bar-inventory-apk
+          path: bin/*.apk
