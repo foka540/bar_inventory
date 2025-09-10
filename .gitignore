@@ -13,3 +13,17 @@ __pycache__/
 # Экспортные файлы
 *.xlsx
 *.csv
+
+# Временные файлы ОС
+.DS_Store
+Thumbs.db
+
+# Редакторы
+.vscode/
+.idea/
+*.swp
+*~
+
+# Buildozer
+.buildozer/
+bin/
