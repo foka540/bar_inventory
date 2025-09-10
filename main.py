@@ -451,166 +451,74 @@ class AddEditBottleScreen(Screen):
 class InventoryScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
+        self.layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
         self.bottle_id = None
         self.current_volume = None
 
-        # Заголовок
-        self.layout.add_widget(Label(text="Инвентаризация", font_size=dp(20), size_hint_y=None, height=dp(40)))
+        # Заголовок выбора
+        self.layout.add_widget(Label(text="Выберите бутылку:", size_hint_y=None, height=30))
 
-        # Фильтры
-        filter_layout = BoxLayout(size_hint_y=None, height=dp(80), spacing=dp(5), orientation='vertical')
-        
-        # Поиск
-        search_layout = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(5))
-        self.search_input = TextInput(hint_text="Поиск по названию...", multiline=False)
-        search_btn = Button(text="🔍", size_hint_x=None, width=dp(40))
-        search_btn.bind(on_press=self.apply_filters)
-        search_layout.add_widget(self.search_input)
-        search_layout.add_widget(search_btn)
-        filter_layout.add_widget(search_layout)
-        
-        # Фильтр по категории
-        category_layout = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(5))
-        categories = ["Все категории"] + [cat[1] for cat in get_all_categories()]
-        self.category_filter = Spinner(text="Все категории", values=categories)
-        self.category_filter.bind(text=self.apply_filters)
-        category_layout.add_widget(Label(text="Категория:", size_hint_x=None, width=dp(80)))
-        category_layout.add_widget(self.category_filter)
-        filter_layout.add_widget(category_layout)
-        
-        self.layout.add_widget(filter_layout)
-
-        # Список бутылок (в ScrollView)
-        self.scroll_view = ScrollView(size_hint=(1, 0.4))
-        self.bottles_container = BoxLayout(orientation='vertical', spacing=dp(5), size_hint_y=None)
-        self.bottles_container.bind(minimum_height=self.bottles_container.setter('height'))
-        self.scroll_view.add_widget(self.bottles_container)
-        self.layout.add_widget(self.scroll_view)
-
-        # Выбранный элемент и ввод веса
-        self.selected_label = Label(text="Выберите бутылку", size_hint_y=None, height=dp(30))
-        self.layout.add_widget(self.selected_label)
+        # Создаём спиннер (сначала пустой или с данными)
+        self.bottle_spinner = self._create_bottle_spinner()
+        self.layout.add_widget(self.bottle_spinner)
 
         # Ввод текущего веса
-        weight_layout = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(5))
         self.current_weight_input = TextInput(
             hint_text="Текущий вес бутылки (г)",
             multiline=False,
             input_filter='float'
         )
-        weight_layout.add_widget(self.current_weight_input)
-        self.layout.add_widget(weight_layout)
+        self.layout.add_widget(self.current_weight_input)
 
         # Кнопки
-        btn_layout = BoxLayout(spacing=dp(10), size_hint_y=None, height=dp(50))
-        calc_btn = Button(text="Рассчитать объём", background_color=(0.3, 0.6, 0.9, 1))
+        btn_layout = BoxLayout(spacing=10, size_hint_y=None, height=50)
+        calc_btn = Button(text="Рассчитать объём")
         calc_btn.bind(on_press=self.calculate_volume)
-        save_btn = Button(text="Сохранить результат", background_color=(0.3, 0.7, 0.3, 1))
+        save_btn = Button(text="Сохранить результат")
         save_btn.bind(on_press=self.save_result)
+        delete_btn = Button(text="Удалить бутылку", background_color=(1, 0, 0, 1))
+        delete_btn.bind(on_press=self.delete_bottle)
+
         btn_layout.add_widget(calc_btn)
         btn_layout.add_widget(save_btn)
+        btn_layout.add_widget(delete_btn)
         self.layout.add_widget(btn_layout)
 
         # Результат
-        self.result_label = Label(text="Объём: -- мл", font_size=dp(24))
+        self.result_label = Label(text="Объём: -- мл", font_size=24)
         self.layout.add_widget(self.result_label)
 
         self.add_widget(self.layout)
-        self.load_bottles()
 
     def on_enter(self):
         """Обновляет список бутылок при входе на экран."""
-        self.load_bottles()
+        # Удаляем старый спиннер
+        if hasattr(self, 'bottle_spinner') and self.bottle_spinner in self.layout.children:
+            self.layout.remove_widget(self.bottle_spinner)
+        # Создаём новый
+        self.bottle_spinner = self._create_bottle_spinner()
+        # Вставляем на место — после заголовка "Выберите бутылку"
+        self.layout.add_widget(self.bottle_spinner, index=len(self.layout.children) - 4)
 
-    def load_bottles(self):
-        """Загружает список бутылок с фильтрами"""
-        self.bottles_container.clear_widgets()
-        
-        search_text = self.search_input.text.strip()
-        category_filter = self.category_filter.text
-        
-        bottles = get_bottles_with_filter(search_text, category_filter)
-        
+    def _create_bottle_spinner(self):
+        """Создаёт выпадающий список бутылок с категориями."""
+        bottles = get_all_bottles_with_categories()
         if not bottles:
-            self.bottles_container.add_widget(Label(text="Бутылки не найдены", size_hint_y=None, height=dp(40)))
-            return
-        
-        for bottle in bottles:
-            bottle_id, name, category, empty_weight, total_volume = bottle
-            card = BottleCard(
-                bottle_id=bottle_id,
-                name=name,
-                category=category,
-                empty_weight=empty_weight,
-                total_volume=total_volume,
-                on_edit=self.edit_bottle,
-                on_delete=self.delete_bottle
-            )
-            self.bottles_container.add_widget(card)
+            return Spinner(text="Нет бутылок", values=["Нет бутылок"])
 
-    def apply_filters(self, *args):
-        """Применяет фильтры и перезагружает список"""
-        self.load_bottles()
-
-    def select_bottle(self, bottle_id):
-        """Выбирает бутылку для инвентаризации"""
-        bottle = get_bottle_by_id(bottle_id)
-        if bottle:
-            self.bottle_id = bottle_id
-            self.selected_label.text = f"Выбрано: {bottle[1]} ({bottle[4]})"
-
-    def edit_bottle(self, bottle_id):
-        """Открывает экран редактирования бутылки"""
-        app = App.get_running_app()
-        add_edit_screen = app.root.get_screen('add_edit_bottle')
-        add_edit_screen.set_edit_mode(bottle_id)
-        app.root.current = 'add_edit_bottle'
-
-    def delete_bottle(self, bottle_id):
-        """Удаляет бутылку с подтверждением"""
-        # Подтверждение
-        content = BoxLayout(orientation='vertical', padding=dp(10))
-        content.add_widget(Label(text="Удалить эту бутылку\nи всю историю по ней?"))
-
-        btn_layout = BoxLayout(spacing=dp(10))
-        yes_btn = Button(text="Да", size_hint_x=0.5, background_color=(1, 0, 0, 1))
-        no_btn = Button(text="Нет", size_hint_x=0.5)
-        btn_layout.add_widget(yes_btn)
-        btn_layout.add_widget(no_btn)
-        content.add_widget(btn_layout)
-
-        popup = Popup(title="Подтверждение удаления", content=content, size_hint=(0.8, 0.4))
-
-        def on_yes(instance):
-            try:
-                db_path = get_db_path()
-                conn = sqlite3.connect(db_path)
-                c = conn.cursor()
-                c.execute("DELETE FROM inventory WHERE bottle_id = ?", (bottle_id,))
-                c.execute("DELETE FROM bottles WHERE id = ?", (bottle_id,))
-                conn.commit()
-                conn.close()
-
-                self.load_bottles()
-                show_popup("Успех", "Бутылка удалена!")
-                popup.dismiss()
-            except Exception as e:
-                show_popup("Ошибка", f"Не удалось удалить: {str(e)}")
-
-        def on_no(instance):
-            popup.dismiss()
-
-        yes_btn.bind(on_press=on_yes)
-        no_btn.bind(on_press=on_no)
-        popup.open()
+        values = [f"{b[0]} | {b[1]} ({b[2]})" for b in bottles]
+        return Spinner(text=values[0], values=values)
 
     def calculate_volume(self, instance):
         """Рассчитывает текущий объём жидкости по весу."""
         try:
-            if not hasattr(self, 'bottle_id') or self.bottle_id is None:
-                show_popup("Ошибка", "Сначала выберите бутылку!")
+            if self.bottle_spinner.text == "Нет бутылок":
+                show_popup("Ошибка", "Сначала добавьте бутылку!")
                 return
+
+            # Извлекаем ID бутылки
+            bottle_info = self.bottle_spinner.text.split(" | ")[0]
+            bottle_id = int(bottle_info)
 
             current_weight = float(self.current_weight_input.text)
 
@@ -618,7 +526,7 @@ class InventoryScreen(Screen):
             db_path = get_db_path()
             conn = sqlite3.connect(db_path)
             c = conn.cursor()
-            c.execute("SELECT empty_weight, total_volume FROM bottles WHERE id = ?", (self.bottle_id,))
+            c.execute("SELECT empty_weight, total_volume FROM bottles WHERE id = ?", (bottle_id,))
             bottle_data = c.fetchone()
             conn.close()
 
@@ -632,6 +540,7 @@ class InventoryScreen(Screen):
 
             self.result_label.text = f"Объём: {round(current_volume, 1)} мл"
             self.current_volume = current_volume
+            self.bottle_id = bottle_id
 
         except ValueError:
             show_popup("Ошибка", "Введите корректный вес!")
@@ -659,6 +568,59 @@ class InventoryScreen(Screen):
 
         except Exception as e:
             show_popup("Ошибка", f"Не удалось сохранить: {str(e)}")
+
+    def delete_bottle(self, instance):
+        """Удаляет бутылку и всю её историю (с подтверждением)."""
+        if self.bottle_spinner.text == "Нет бутылок":
+            show_popup("Ошибка", "Нет бутылок для удаления!")
+            return
+
+        try:
+            bottle_info = self.bottle_spinner.text.split(" | ")[0]
+            bottle_id = int(bottle_info)
+        except:
+            show_popup("Ошибка", "Выберите бутылку!")
+            return
+
+        # Подтверждение
+        content = BoxLayout(orientation='vertical', padding=10)
+        content.add_widget(Label(text="Удалить эту бутылку\nи всю историю по ней?"))
+
+        btn_layout = BoxLayout(spacing=10)
+        yes_btn = Button(text="Да", size_hint_x=0.5, background_color=(1, 0, 0, 1))
+        no_btn = Button(text="Нет", size_hint_x=0.5)
+        btn_layout.add_widget(yes_btn)
+        btn_layout.add_widget(no_btn)
+        content.add_widget(btn_layout)
+
+        popup = Popup(title="Подтверждение удаления", content=content, size_hint=(0.8, 0.4))
+
+        def on_yes(instance):
+            try:
+                db_path = get_db_path()
+                conn = sqlite3.connect(db_path)
+                c = conn.cursor()
+                c.execute("DELETE FROM inventory WHERE bottle_id = ?", (bottle_id,))
+                c.execute("DELETE FROM bottles WHERE id = ?", (bottle_id,))
+                conn.commit()
+                conn.close()
+
+                # Обновляем список бутылок
+                self.layout.remove_widget(self.bottle_spinner)
+                self.bottle_spinner = self._create_bottle_spinner()
+                self.layout.add_widget(self.bottle_spinner, index=len(self.layout.children) - 4)
+
+                show_popup("Успех", "Бутылка удалена!")
+                popup.dismiss()
+            except Exception as e:
+                show_popup("Ошибка", f"Не удалось удалить: {str(e)}")
+
+        def on_no(instance):
+            popup.dismiss()
+
+        yes_btn.bind(on_press=on_yes)
+        no_btn.bind(on_press=on_no)
+        popup.open()
 
 # =============================
 # 📜 ЭКРАН: ИСТОРИЯ + ЭКСПОРТ В EXCEL
