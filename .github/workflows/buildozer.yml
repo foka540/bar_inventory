@@ -11,7 +11,7 @@ jobs:
     steps:
       - name: Checkout код
         uses: actions/checkout@v4
-           
+        
       - name: Установка зависимостей
         run: |
           sudo apt-get update
@@ -19,7 +19,7 @@ jobs:
           pip install --upgrade pip
           pip install buildozer
           pip install Cython==0.29.33
-           
+        
       - name: Сборка APK
         run: |
           buildozer init
@@ -37,10 +37,8 @@ jobs:
           echo 'android.arch = arm64-v8a' >> buildozer.spec
           echo 'orientation = portrait' >> buildozer.spec
           echo 'android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE' >> buildozer.spec
-          echo 'log_level = 2' >> buildozer.spec
-          echo 'warn_level = 2' >> buildozer.spec
           buildozer -v android debug
-           
+        
       - name: Загрузка APK
         uses: actions/upload-artifact@v4
         with:

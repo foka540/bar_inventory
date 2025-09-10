@@ -1,7 +1,12 @@
-*.db
-__pycache__
-.vscode
-*.pyc
-*.spec
-bin/
+# Buildozer
 .buildozer/
+bin/
+*.apk
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# VS Code
+.vscode/
