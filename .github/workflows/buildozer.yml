@@ -45,37 +45,41 @@ jobs:
           pip install Cython==0.29.36
           pip install buildozer
 
+      - name: Cache .buildozer directory
+        uses: actions/cache@v3
+        with:
+          path: ~/.buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+
       - name: Create buildozer.spec
         run: |
-          echo "[app]
-          title = Bar Inventory
-          package.name = barinventory
-          package.domain = org.barinventory
-          source.dir = .
-          source.include_exts = py,db,png,jpg,kv,atlas
-          source.include_patterns = assets/*,res/*,libs/*
-          version = 1.0
-          requirements = python3,kivy==2.2.1,openssl,sqlite3
-          android.api = 33
-          android.minapi = 21
-          android.ndk = 23c
-          android.ndk_path = /home/runner/android-ndk-r23c
-          android.sdk_path = /home/runner/android-sdk
-          android.arch = arm64-v8a
-          android.p4a_dir = /home/runner/.local/bin/p4a
-          orientation = portrait
-          fullscreen = 0
-          android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
-          android.wakelock = False
-          android.meta_data = 
-          android.activity_attributes = 
-          android.allow_backup = True
-          android.filename = BarInventory-1.0-arm64-v8a-debug.apk
-          android.accept_sdk_license = True
-          android.adaptive_icon = 0
-          
-          [buildozer]
-          log_level = 2" > buildozer.spec
+          cat > buildozer.spec << 'EOF'
+[app]
+title = Bar Inventory
+package.name = barinventory
+package.domain = org.barinventory
+source.dir = .
+source.include_exts = py,db,png,jpg,kv,atlas
+source.include_patterns = assets/*,res/*,libs/*
+version = 1.0
+requirements = python3,kivy==2.2.1,openssl,sqlite3
+android.api = 33
+android.minapi = 21
+android.ndk = 25b
+android.ndk_path = /home/runner/android-ndk-r25b
+android.sdk_path = /home/runner/android-sdk
+android.arch = arm64-v8a
+orientation = portrait
+fullscreen = 0
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.wakelock = False
+android.allow_backup = True
+android.accept_sdk_license = True
+android.adaptive_icon = 0
+
+[buildozer]
+log_level = 2
+EOF
 
       - name: Download Android SDK and NDK
         run: |
@@ -84,9 +88,9 @@ jobs:
           unzip cmdline-tools.zip -d android-sdk/cmdline-tools
           mv android-sdk/cmdline-tools/cmdline-tools android-sdk/cmdline-tools/latest
           
-          wget https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O android-ndk.zip
+          wget https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O android-ndk.zip
           unzip android-ndk.zip
-          mv android-ndk-r23c android-ndk
+          mv android-ndk-r25b android-ndk
 
       - name: Set up environment variables
         run: |
@@ -97,6 +101,10 @@ jobs:
       - name: Accept Android licenses
         run: |
           yes | $PWD/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+
+      - name: Install Android Build Tools and Platform
+        run: |
+          $PWD/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "build-tools;33.0.0" "platforms;android-33"
 
       - name: Build APK with Buildozer
         run: |
