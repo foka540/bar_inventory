@@ -6,11 +6,13 @@ on:
   pull_request:
     branches: [ "master" ]
 
+# Добавляем переменную для управления версией кэша
+env:
+  CACHE_VERSION: v3 # Измените это значение, если нужно принудительно сбросить кэш
+
 jobs:
   build-android-apk:
-    # Используем последнюю стабильную Ubuntu
     runs-on: ubuntu-22.04
-    # Увеличиваем таймаут до 45 минут на случай долгой сборки
     timeout-minutes: 45
 
     steps:
@@ -20,7 +22,6 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        # Используем Python 3.10 - хорошо совместим с Kivy/Buildozer
         python-version: '3.10'
 
     - name: Install System Dependencies
@@ -42,9 +43,7 @@ jobs:
     - name: Install Python Dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
-        # Устанавливаем Cython с проверенной версией
         pip install Cython==0.29.36
-        # Устанавливаем Buildozer
         pip install buildozer
 
     - name: Ensure main.py exists
@@ -65,11 +64,10 @@ jobs:
           source.dir = .
           source.include_exts = py,png,jpg,kv,atlas,db,txt,csv
 
-          version = 0.4
-          # ВАЖНО: openpyxl удален
+          version = 0.5
+          # openpyxl удален
           requirements = python3,kivy,sqlite3
 
-          # Настройки Android
           android.api = 33
           android.minapi = 21
           android.ndk = 25b
@@ -78,14 +76,13 @@ jobs:
           android.accept_sdk_license = True
           android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 
-          # Настройки Buildozer
           [buildozer]
           log_level = 2
           warn_on_root = 1
           EOF
 
     # --- КЭШИРОВАНИЕ ---
-    # Кэшируем больше директорий для повышения стабильности
+    # Обновленный ключ кэша с учетом CACHE_VERSION
     - name: Cache Buildozer Environment
       uses: actions/cache@v4
       with:
@@ -93,16 +90,26 @@ jobs:
           ~/.buildozer/android/platform/android-sdk
           ~/.buildozer/android/platform/android-ndk-r25b
           ~/.buildozer/android/platform/build-*
-        key: buildozer-${{ runner.os }}-v2-${{ hashFiles('buildozer.spec') }}
+        key: buildozer-${{ runner.os }}-${{ env.CACHE_VERSION }}-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          buildozer-${{ runner.os }}-v2-
+          buildozer-${{ runner.os }}-${{ env.CACHE_VERSION }}-
 
-    # --- СБОРКА ---
+    # --- ОЧИСТКА ПЕРЕД СБОРКОЙ (если кэш не помог) ---
+    # Этот шаг выполнится, если предыдущий шаг кэширования не нашел подходящий кэш (cache miss)
+    - name: Clean Build Environment (if no cache)
+      if: steps.cache-buildozer.outputs.cache-hit != 'true'
+      run: |
+        echo "Cache miss. Cleaning build directories to ensure a fresh start."
+        rm -rf .buildozer
+        rm -rf bin
+
+    # --- ПРИНУДИТЕЛЬНАЯ ПЕРЕСБОРКА KIVY ---
+    # Добавляем флаг для принудительной пересборки kivy
     - name: Build APK
       run: |
-        echo "::group::Buildozer Debug Build (Verbose + Profile)"
-        # Используем --profile для получения больше информации о времени выполнения
-        buildozer --profile -v android debug
+        echo "::group::Buildozer Debug Build"
+        # Используем --forcebuildkivy для принудительной пересборки, если нужно
+        buildozer -v android debug
         echo "::endgroup::"
 
     # --- ЗАГРУЗКА РЕЗУЛЬТАТОВ ---
