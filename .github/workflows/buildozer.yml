@@ -115,4 +115,4 @@ EOF
         uses: actions/upload-artifact@v4
         with:
           name: bar-inventory-apk
-          path: bin/*.apk
+          path: bin/*.apk 
