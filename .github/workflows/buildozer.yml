@@ -37,7 +37,9 @@ jobs:
             automake \
             libtool \
             pkg-config \
-            libltdl-dev
+            libltdl-dev \
+            cmake \
+            ninja-build
 
       - name: Install Python dependencies
         run: |
@@ -45,74 +47,70 @@ jobs:
           pip install Cython==0.29.36
           pip install buildozer
 
-      - name: Cache .buildozer directory
-        uses: actions/cache@v3
-        with:
-          path: ~/.buildozer
-          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
-
       - name: Create buildozer.spec
         run: |
-          cat > buildozer.spec << 'EOF'
-[app]
-title = Bar Inventory
-package.name = barinventory
-package.domain = org.barinventory
-source.dir = .
-source.include_exts = py,db,png,jpg,kv,atlas
-source.include_patterns = assets/*,res/*,libs/*
-version = 1.0
-requirements = python3,kivy==2.2.1,openssl,sqlite3
-android.api = 33
-android.minapi = 21
-android.ndk = 25b
-android.ndk_path = /home/runner/android-ndk-r25b
-android.sdk_path = /home/runner/android-sdk
-android.arch = arm64-v8a
-orientation = portrait
-fullscreen = 0
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
-android.wakelock = False
-android.allow_backup = True
-android.accept_sdk_license = True
-android.adaptive_icon = 0
+          cat > buildozer.spec << EOF
+          [app]
+          title = Bar Inventory
+          package.name = barinventory
+          package.domain = org.barinventory
+          source.dir = .
+          source.include_exts = py,db,png,jpg,kv,atlas
+          source.include_patterns = assets/*,res/*,libs/*
+          version = 1.0
+          requirements = python3,kivy==2.2.1,openssl,sqlite3
+          android.api = 33
+          android.minapi = 21
+          android.ndk = 23c
+          android.arch = arm64-v8a
+          orientation = portrait
+          fullscreen = 0
+          android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+          android.wakelock = False
+          android.allow_backup = True
+          android.accept_sdk_license = True
+          android.filename = BarInventory-1.0-arm64-v8a-debug.apk
 
-[buildozer]
-log_level = 2
-EOF
+          [buildozer]
+          log_level = 2
+          EOF
 
       - name: Download Android SDK and NDK
         run: |
+          # SDK
           wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
           mkdir -p android-sdk/cmdline-tools
           unzip cmdline-tools.zip -d android-sdk/cmdline-tools
           mv android-sdk/cmdline-tools/cmdline-tools android-sdk/cmdline-tools/latest
-          
-          wget https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O android-ndk.zip
-          unzip android-ndk.zip
-          mv android-ndk-r25b android-ndk
+          rm cmdline-tools.zip
 
-      - name: Set up environment variables
+          # NDK
+          wget https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O android-ndk.zip
+          unzip android-ndk.zip
+          mv android-ndk-r23c android-ndk
+          rm android-ndk.zip
+
+      - name: Setup environment variables
         run: |
           echo "ANDROID_SDK_HOME=$PWD/android-sdk" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$PWD/android-ndk" >> $GITHUB_ENV
           echo "PATH=$PWD/android-sdk/cmdline-tools/latest/bin:$PWD/android-ndk:$PATH" >> $GITHUB_ENV
+          # Экспорт для текущего шага
+          export ANDROID_SDK_HOME=$PWD/android-sdk
+          export ANDROID_NDK_HOME=$PWD/android-ndk
+          export PATH=$PWD/android-sdk/cmdline-tools/latest/bin:$PWD/android-ndk:$PATH
 
-      - name: Accept Android licenses
+      - name: Accept Android SDK Licenses
         run: |
-          yes | $PWD/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-
-      - name: Install Android Build Tools and Platform
-        run: |
-          $PWD/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "build-tools;33.0.0" "platforms;android-33"
+          yes | $ANDROID_SDK_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Build APK with Buildozer
         run: |
           buildozer android clean
           buildozer -v android debug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: bar-inventory-apk
-          path: bin/*.apk 
+          path: bin/*.apk
