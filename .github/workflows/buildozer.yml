@@ -1,12 +1,20 @@
-name: Сборка APK
+name: Build APK with Buildozer
 
 on:
   push:
-    branches: ['master']
+    branches:
+      - 'master'
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      ANDROID_SDK_VERSION: 8512546
+      ANDROID_NDK_VERSION: r23c
+      CACHE_DIR: ${{ github.workspace }}/cache
+    concurrency:
+      group: build-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout code
@@ -17,97 +25,103 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install system dependencies
+      - name: Setup cache directories
         run: |
+          mkdir -p $CACHE_DIR/sdk
+          mkdir -p $CACHE_DIR/ndk
+          
+      - name: Restore SDK cache
+        uses: actions/cache@v3
+        with:
+          path: $CACHE_DIR/sdk
+          key: sdk-${{ env.ANDROID_SDK_VERSION }}
+      
+      - name: Restore NDK cache
+        uses: actions/cache@v3
+        with:
+          path: $CACHE_DIR/ndk
+          key: ndk-${{ env.ANDROID_NDK_VERSION }}
+
+      - name: Install System Dependencies
+        run: |
+          set -e
           sudo apt-get update
           sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            openjdk-17-jdk \
-            build-essential \
-            libffi-dev \
-            libssl-dev \
-            libxml2-dev \
-            libxslt1-dev \
-            libjpeg-dev \
-            zlib1g-dev \
-            python3-pip \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            libltdl-dev \
-            cmake \
-            ninja-build
+            git unzip zip openjdk-17-jdk build-essential \
+            libffi-dev libssl-dev libxml2-dev libxslt1-dev libjpeg-dev \
+            zlib1g-dev python3-pip autoconf automake libtool pkg-config libltdl-dev \
+            cmake ninja-build
 
-      - name: Install Python dependencies
+      - name: Upgrade Python and Install Python Packages
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install Cython==0.29.36
-          pip install buildozer
+          pip install Cython==0.29.36 buildozer
 
-      - name: Create buildozer.spec
+      - name: Download and Cache Android SDK
+        if: steps.restore_sdk_cache.outputs.cache-hit != 'true'
         run: |
-          cat > buildozer.spec << EOF
-          [app]
-          title = Bar Inventory
-          package.name = barinventory
-          package.domain = org.barinventory
-          source.dir = .
-          source.include_exts = py,db,png,jpg,kv,atlas
-          source.include_patterns = assets/*,res/*,libs/*
-          version = 1.0
-          requirements = python3,kivy==2.2.1,openssl,sqlite3
-          android.api = 33
-          android.minapi = 21
-          android.ndk = 23c
-          android.arch = arm64-v8a
-          orientation = portrait
-          fullscreen = 0
-          android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
-          android.wakelock = False
-          android.allow_backup = True
-          android.accept_sdk_license = True
-          android.filename = BarInventory-1.0-arm64-v8a-debug.apk
-
-          [buildozer]
-          log_level = 2
-          EOF
-
-      - name: Download Android SDK and NDK
-        run: |
-          # SDK
-          wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip -O cmdline-tools.zip
-          mkdir -p android-sdk/cmdline-tools
-          unzip cmdline-tools.zip -d android-sdk/cmdline-tools
-          mv android-sdk/cmdline-tools/cmdline-tools android-sdk/cmdline-tools/latest
+          set -e
+          echo "Downloading Android SDK..."
+          mkdir -p $HOME/android-sdk
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-${{ env.ANDROID_SDK_VERSION }}_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip -d $HOME/android-sdk
+          mv $HOME/android-sdk/cmdline-tools $HOME/android-sdk/latest
           rm cmdline-tools.zip
 
-          # NDK
-          wget https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O android-ndk.zip
-          unzip android-ndk.zip
-          mv android-ndk-r23c android-ndk
+      - name: Download and Cache Android NDK
+        if: steps.restore_ndk_cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          echo "Downloading Android NDK..."
+          wget -q https://dl.google.com/android/repository/android-ndk-${{ env.ANDROID_NDK_VERSION }}-linux.zip -O android-ndk.zip
+          unzip -q android-ndk.zip -d $HOME/
+          mv $HOME/android-ndk-${{ env.ANDROID_NDK_VERSION }} $HOME/android-ndk
           rm android-ndk.zip
 
-      - name: Setup environment variables
+      - name: Save SDK and NDK Cache
+        uses: actions/cache@v3
+        with:
+          path: $CACHE_DIR/sdk
+          key: sdk-${{ env.ANDROID_SDK_VERSION }}
+        if: steps.download_and_cache_sdk.results == 'success'
+
+      - name: Save NDK Cache
+        uses: actions/cache@v3
+        with:
+          path: $CACHE_DIR/ndk
+          key: ndk-${{ env.ANDROID_NDK_VERSION }}
+        if: steps.download_and_cache_ndk.results == 'success'
+
+      - name: Set Environment Variables
         run: |
-          echo "ANDROID_SDK_HOME=$PWD/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$PWD/android-ndk" >> $GITHUB_ENV
-          echo "PATH=$PWD/android-sdk/cmdline-tools/latest/bin:$PWD/android-ndk:$PATH" >> $GITHUB_ENV
-          # Экспорт для текущего шага
-          export ANDROID_SDK_HOME=$PWD/android-sdk
-          export ANDROID_NDK_HOME=$PWD/android-ndk
-          export PATH=$PWD/android-sdk/cmdline-tools/latest/bin:$PWD/android-ndk:$PATH
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$HOME/android-ndk" >> $GITHUB_ENV
+          echo "$HOME/android-sdk/latest" >> $GITHUB_PATH
+          echo "$HOME/android-ndk" >> $GITHUB_PATH
+          
+          export ANDROID_SDK_ROOT=$HOME/android-sdk
+          export ANDROID_NDK_ROOT=$HOME/android-ndk
+          export PATH="$HOME/android-sdk/latest:$PATH:$HOME/android-ndk"
 
       - name: Accept Android SDK Licenses
         run: |
-          yes | $ANDROID_SDK_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          set -e
+          yes | $ANDROID_SDK_ROOT/bin/sdkmanager --licenses
 
-      - name: Build APK with Buildozer
+      - name: Prepare build environment
         run: |
-          buildozer android clean
-          buildozer -v android debug
+          set -e
+          buildozer android clean || echo "No previous build artifacts to clean."
+
+      - name: Build APK (with logging)
+        run: |
+          set -e
+          echo "Starting build..."
+          # Перехватываем ошибки для более детального логирования
+          if ! buildozer -v android debug; then
+            echo "Build failed. Check logs above for details."
+            exit 1
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
