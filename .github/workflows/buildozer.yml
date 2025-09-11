@@ -1,99 +1,143 @@
-name: Сборка APK - Улучшенная
+name: Build Android APK
 
+# 1. Триггеры: запуск при пуше в master или при PR в master
 on:
   push:
-    branches: ['master']
+    branches: [ "master" ]
   pull_request:
-    branches: ['master']
+    branches: [ "master" ]
 
 jobs:
-  build-apk:
-    runs-on: ubuntu-22.04 # 1. Используем стабильную версию Ubuntu
+  build-android-apk:
+    # 2. Используем последнюю стабильную Ubuntu
+    runs-on: ubuntu-22.04
+    # 3. Увеличиваем таймаут до 40 минут (по умолчанию 6 часов, но для логики)
+    timeout-minutes: 40
 
     steps:
-      - name: Checkout code # 2. Получаем код проекта
-        uses: actions/checkout@v4
+    # 4. Шаг: Получение кода из репозитория
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Setup Python # 3. Настраиваем Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10' # Явно указываем 3.10
+    # 5. Шаг: Настройка Python
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        # Используем Python 3.10 - хорошо совместим с Kivy/Buildozer
+        python-version: '3.10'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            git \
-            zip \
-            unzip \
-            openjdk-17-jdk \
-            libffi-dev \
-            libssl-dev \
-            zlib1g-dev \
-            libsqlite3-dev \
-            libncurses-dev \        # ← Исправлено: было libncurses5-dev
-            libbz2-dev \
-            libxml2-dev \
-            libxslt1-dev
+    # 6. Шаг: Установка системных зависимостей
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          git \
+          zip \
+          unzip \
+          openjdk-17-jdk \
+          libffi-dev \
+          libssl-dev \
+          zlib1g-dev \
+          libsqlite3-dev \
+          libncurses5-dev \
+          libbz2-dev
 
-      - name: Install Python dependencies # 5. Устанавливаем Python-пакеты
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          # Устанавливаем Cython с фиксированной версией, совместимой с Kivy
-          pip install Cython==0.29.36
-          # Устанавливаем Buildozer
-          pip install buildozer
+    # 7. Шаг: Установка Python-зависимостей
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        # Устанавливаем Cython с проверенной версией
+        pip install Cython==0.29.36
+        # Устанавливаем Buildozer
+        pip install buildozer
 
-      - name: Ensure main.py exists # 6. Проверяем/создаем точку входа
-        run: |
-          if [ ! -f "main.py" ]; then
-            echo 'print("APK build successful!")' > main.py
-            echo "WARNING: main.py was not found and has been created with a default print statement."
-          fi
+    # 8. Шаг: Проверка/создание main.py
+    - name: Ensure main.py exists
+      run: |
+        if [ ! -f "main.py" ]; then
+          echo 'print("APK build successful - default main.py")' > main.py
+          echo "::warning:: main.py was not found in the repository and has been created with a default print statement."
+        fi
 
-      - name: Create buildozer.spec # 7. Создаем конфигурационный файл явно
-        run: |
-          cat > buildozer.spec << 'EOF'
+    # 9. Шаг: Создание buildozer.spec
+    - name: Create buildozer.spec
+      run: |
+        cat > buildozer.spec << 'EOF'
           [app]
+          # Основные параметры приложения
           title = Bar Inventory
           package.name = barinventory
-          package.domain = org.example
+          package.domain = org.example.barinventory
+
           source.dir = .
-          source.include_exts = py,png,jpg,kv,atlas,db
-          version = 0.2
-          # ВАЖНО: openpyxl удален для стабильной сборки
+          # Включаем все необходимые расширения файлов
+          source.include_exts = py,png,jpg,kv,atlas,db,txt,csv
+
+          version = 0.3
+          # ВАЖНО: Убираем openpyxl для стабильной сборки
           requirements = python3,kivy,sqlite3
-          # Используем API 33 как более стабильный
+
+          # Настройки Android
+          # Используем API 33 как стабильный и современный
           android.api = 33
           android.minapi = 21
+          # Используем NDK r25b - проверенная версия
           android.ndk = 25b
-          # Указываем архитектуру
+          # Целевая архитектура
           android.archs = arm64-v8a
+          # Ориентация экрана
           orientation = portrait
-          # Не забываем про лицензию
+          # Автоматически принимаем лицензию SDK
           android.accept_sdk_license = True
           # Разрешения приложения
           android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 
+          # Настройки Buildozer
           [buildozer]
-          # Более подробный лог
+          # Подробный лог
           log_level = 2
+          # Предупреждать при запуске от root
           warn_on_root = 1
           EOF
 
-      # 8. Очистка предыдущих сборок (опционально, но рекомендуется для чистоты)
-      - name: Clean previous build (optional)
-        run: |
-          rm -rf .buildozer
-          rm -rf bin
+    # 10. Шаг: Кэширование .buildozer (ускоряет повторные сборки)
+    - name: Cache Buildozer files
+      uses: actions/cache@v4
+      with:
+        path: |
+          .buildozer/android/platform/android-sdk
+          .buildozer/android/platform/android-ndk-r25b
+        key: buildozer-${{ runner.os }}-sdk-ndk
 
-      - name: Build APK # 9. Запускаем сборку
-        run: |
-          buildozer -v android debug
+    # 11. Шаг: Сборка APK
+    - name: Build APK
+      run: |
+        echo "::group::Buildozer Debug Build"
+        # Запускаем сборку с подробным логом
+        buildozer -v android debug
+        echo "::endgroup::"
 
-      - name: Upload APK # 10. Загружаем результат
-        uses: actions/upload-artifact@v4
-        with:
-          name: bar-inventory-apk
-          path: bin/*.apk
+    # 12. Шаг: Загрузка APK как артефакта
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      # Выполняется только если предыдущий шаг успешен
+      if: success()
+      with:
+        name: bar-inventory-apk-debug
+        # Загружаем все APK из папки bin
+        path: bin/*.apk
+        # Если файлов нет, не падаем с ошибкой
+        if-no-files-found: ignore
+
+    # 13. Шаг: Загрузка логов сборки как артефакта (всегда выполняется)
+    - name: Upload Build Logs
+      uses: actions/upload-artifact@v4
+      # Выполняется всегда, даже если сборка упала
+      if: always()
+      with:
+        name: build-logs
+        path: |
+          *.log
+          .buildozer/android/platform/build-*/build/bootstrap_builds/sdl2/obj/local/arm64-v8a/*.log
+        if-no-files-found: ignore
