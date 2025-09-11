@@ -19,24 +19,23 @@ jobs:
         with:
           python-version: '3.10' # Явно указываем 3.10
 
-      - name: Install system dependencies # 4. Устанавливаем только необходимые зависимости
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          # Устанавливаем минимально необходимый набор системных пакетов
           sudo apt-get install -y \
-            build-essential \          # Компиляторы и make
-            git \                      # Git
-            zip \                      # zip
-            unzip \                    # unzip
-            openjdk-17-jdk \           # Java 17 (рекомендуемая версия)
-            libffi-dev \               # Заголовки FFI для Cython
-            libssl-dev \               # Заголовки SSL
-            zlib1g-dev \               # Заголовки zlib
-            libsqlite3-dev \           # Заголовки SQLite
-            libncurses5-dev \          # Заголовки ncurses
-            libbz2-dev \               # Заголовки bzip2
-            libxml2-dev \              # Заголовки XML (для lxml, если нужно)
-            libxslt1-dev               # Заголовки XSLT (для lxml, если нужно)
+            build-essential \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            libffi-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libsqlite3-dev \
+            libncurses-dev \        # ← Исправлено: было libncurses5-dev
+            libbz2-dev \
+            libxml2-dev \
+            libxslt1-dev
 
       - name: Install Python dependencies # 5. Устанавливаем Python-пакеты
         run: |
