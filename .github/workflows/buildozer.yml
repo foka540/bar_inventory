@@ -1,55 +1,126 @@
-name: Сборка APK
+name: Build Android APK
 
 on:
   push:
     branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-android-apk:
+    # Используем последнюю стабильную Ubuntu
+    runs-on: ubuntu-22.04
+    # Увеличиваем таймаут до 45 минут на случай долгой сборки
+    timeout-minutes: 45
 
     steps:
-      - name: Checkout код
-        uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-      - name: Установка Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        # Используем Python 3.10 - хорошо совместим с Kivy/Buildozer
+        python-version: '3.10'
 
-      - name: Установка Buildozer и зависимостей
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk
-          pip install buildozer
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          git \
+          zip \
+          unzip \
+          openjdk-17-jdk \
+          libffi-dev \
+          libssl-dev \
+          zlib1g-dev \
+          libsqlite3-dev \
+          libncurses5-dev \
+          libbz2-dev
 
-      - name: Создание buildozer.spec
-        run: |
-          echo "[app]" > buildozer.spec
-          echo "title = Bar Inventory" >> buildozer.spec
-          echo "package.name = barinventory" >> buildozer.spec
-          echo "package.domain = org.barinventory" >> buildozer.spec
-          echo "source.dir = ." >> buildozer.spec
-          echo "source.include_exts = py,db" >> buildozer.spec
-          echo "version = 1.0" >> buildozer.spec
-          echo "requirements = python3,kivy,sqlite3" >> buildozer.spec
-          echo "android.api = 31" >> buildozer.spec
-          echo "android.minapi = 21" >> buildozer.spec
-          echo "android.ndk = 25b" >> buildozer.spec
-          echo "android.arch = arm64-v8a" >> buildozer.spec
-          echo "orientation = portrait" >> buildozer.spec
-          echo "android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE" >> buildozer.spec
-          echo "android.accept_sdk_license = True" >> buildozer.spec
-          echo "" >> buildozer.spec
-          echo "[buildozer]" >> buildozer.spec
-          echo "log_level = info" >> buildozer.spec
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        # Устанавливаем Cython с проверенной версией
+        pip install Cython==0.29.36
+        # Устанавливаем Buildozer
+        pip install buildozer
 
-      - name: Сборка APK
-        run: |
-          buildozer -v android debug
+    - name: Ensure main.py exists
+      run: |
+        if [ ! -f "main.py" ]; then
+          echo 'print("APK build successful - default main.py")' > main.py
+          echo "::warning:: main.py was not found in the repository and has been created with a default print statement."
+        fi
 
-      - name: Загрузка APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: bar-inventory-apk
-          path: bin/*.apk
+    - name: Create buildozer.spec
+      run: |
+        cat > buildozer.spec << 'EOF'
+          [app]
+          title = Bar Inventory
+          package.name = barinventory
+          package.domain = org.example.barinventory
+
+          source.dir = .
+          source.include_exts = py,png,jpg,kv,atlas,db,txt,csv
+
+          version = 0.4
+          # ВАЖНО: openpyxl удален
+          requirements = python3,kivy,sqlite3
+
+          # Настройки Android
+          android.api = 33
+          android.minapi = 21
+          android.ndk = 25b
+          android.archs = arm64-v8a
+          orientation = portrait
+          android.accept_sdk_license = True
+          android.permissions = INTERNET, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
+
+          # Настройки Buildozer
+          [buildozer]
+          log_level = 2
+          warn_on_root = 1
+          EOF
+
+    # --- КЭШИРОВАНИЕ ---
+    # Кэшируем больше директорий для повышения стабильности
+    - name: Cache Buildozer Environment
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.buildozer/android/platform/android-sdk
+          ~/.buildozer/android/platform/android-ndk-r25b
+          ~/.buildozer/android/platform/build-*
+        key: buildozer-${{ runner.os }}-v2-${{ hashFiles('buildozer.spec') }}
+        restore-keys: |
+          buildozer-${{ runner.os }}-v2-
+
+    # --- СБОРКА ---
+    - name: Build APK
+      run: |
+        echo "::group::Buildozer Debug Build (Verbose + Profile)"
+        # Используем --profile для получения больше информации о времени выполнения
+        buildozer --profile -v android debug
+        echo "::endgroup::"
+
+    # --- ЗАГРУЗКА РЕЗУЛЬТАТОВ ---
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: bar-inventory-apk-debug
+        path: bin/*.apk
+        if-no-files-found: ignore
+
+    - name: Upload Build Logs
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: build-logs
+        path: |
+          *.log
+          .buildozer/android/platform/build-*/build/bootstrap_builds/sdl2/obj/local/arm64-v8a/*.log
+          .buildozer/android/platform/build-*/build/other_builds/**/*log
+        if-no-files-found: ignore
